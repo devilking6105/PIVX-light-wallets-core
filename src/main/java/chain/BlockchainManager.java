@@ -36,6 +36,7 @@ import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 
 import global.ContextWrapper;
@@ -222,7 +223,7 @@ public class BlockchainManager {
         }
     }
 
-    public void check(Set<Impediment> impediments, PeerConnectedEventListener peerConnectivityListener, PeerDisconnectedEventListener peerDisconnectedEventListener , PeerDataEventListener blockchainDownloadListener){
+    public void check(Set<Impediment> impediments, PeerConnectedEventListener peerConnectivityListener, PeerDisconnectedEventListener peerDisconnectedEventListener , PeerDataEventListener blockchainDownloadListener, Executor executor){
         synchronized (this) {
             //final Wallet wallet = walletManager.getWallet();
 
@@ -245,8 +246,8 @@ public class BlockchainManager {
                 peerGroup.setDownloadTxDependencies(0); // recursive implementation causes StackOverflowError
                 walletManager.addWalletFrom(peerGroup);
                 peerGroup.setUserAgent(USER_AGENT, context.getVersionName());
-                peerGroup.addConnectedEventListener(peerConnectivityListener);
-                peerGroup.addDisconnectedEventListener(peerDisconnectedEventListener);
+                peerGroup.addConnectedEventListener(executor,peerConnectivityListener);
+                peerGroup.addDisconnectedEventListener(executor,peerDisconnectedEventListener);
 
                 // Memory check
                 final int maxConnectedPeers = context.isMemoryLow() ? 4 : 6 ;
