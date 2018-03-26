@@ -118,13 +118,6 @@ public interface PivxModule {
 
     PivxRate getRate(String selectedRateCoin);
 
-    /**
-     * Don't use this..
-     * @return
-     */
-    @Deprecated
-    Wallet getWallet();
-
     List<InputWrapper> listUnspentWrappers();
 
     Set<InputWrapper> convertFrom(List<TransactionInput> list) throws TxNotFoundException;

@@ -475,11 +475,6 @@ public class PivxModuleImp implements PivxModule {
     }
 
     @Override
-    public Wallet getWallet() {
-        return walletManager.getWallet();
-    }
-
-    @Override
     public List<InputWrapper> listUnspentWrappers() {
         List<InputWrapper> inputWrappers = new ArrayList<>();
         for (TransactionOutput transactionOutput : walletManager.listUnspent()) {
