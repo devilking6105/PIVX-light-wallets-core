@@ -179,6 +179,11 @@ public class PivxModuleImp implements PivxModule {
     }
 
     @Override
+    public List<AddressLabel> getMyAddresses() {
+        return contactsStore.getMyAddresses();
+    }
+
+    @Override
     public void saveContact(AddressLabel addressLabel) throws ContactAlreadyExistException {
         if (contactsStore.getContact(addressLabel.getAddresses().get(0))!=null) throw new ContactAlreadyExistException();
         contactsStore.insert(addressLabel);

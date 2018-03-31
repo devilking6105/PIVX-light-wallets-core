@@ -19,9 +19,17 @@ public class AddressLabel implements Serializable{
     private List<String> addresses = new ArrayList<>();
     /** Set of tx sent to this contact */
     private Set<String> txHashes;
+    private String description;
+    private boolean isMyAdrress;
 
     public AddressLabel(int id, String name) {
         this.name = name;
+    }
+
+    public AddressLabel(String name, String description, boolean isMyAdrress) {
+        this.name = name;
+        this.description = description;
+        this.isMyAdrress = isMyAdrress;
     }
 
     public AddressLabel(String name) {
@@ -69,5 +77,21 @@ public class AddressLabel implements Serializable{
 
     public int getId() {
         return id;
+    }
+
+    public String getPurpose() {
+        return description;
+    }
+
+    public boolean isMyAddress() {
+        return isMyAdrress;
+    }
+
+    public void setDescription(String description) {
+        this.description = description;
+    }
+
+    public void setIsMine(boolean isMine) {
+        this.isMyAdrress = isMine;
     }
 }

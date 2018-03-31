@@ -89,6 +89,8 @@ public interface PivxModule {
 
     AddressLabel getAddressLabel(String address);
 
+    List<AddressLabel> getMyAddresses();
+
     void saveContact(AddressLabel addressLabel) throws ContactAlreadyExistException;
 
     void saveContactIfNotExist(AddressLabel addressLabel);
@@ -163,5 +165,4 @@ public interface PivxModule {
     List<PivxRate> listRates();
 
     List<String> getAvailableMnemonicWordsList();
-
 }
