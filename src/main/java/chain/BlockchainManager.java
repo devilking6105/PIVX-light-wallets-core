@@ -3,6 +3,7 @@ package chain;
 import com.google.common.base.Stopwatch;
 import com.google.common.util.concurrent.ListenableFuture;
 
+import global.utils.Io;
 import org.pivxj.core.BlockChain;
 import org.pivxj.core.CheckpointManager;
 import org.pivxj.core.Peer;
@@ -217,9 +218,15 @@ public class BlockchainManager {
 
         if (resetBlockchainOnShutdown) {
             LOG.info("removing blockchain");
-            blockChainFile.delete();
             blockChain=null;
             blockStore=null;
+            if(!blockChainFile.delete()){
+                try {
+                    Io.delete(blockChainFile);
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            }
         }
     }
 
