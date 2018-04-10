@@ -41,4 +41,8 @@ public class PivxRate {
         return null;
     }
 
+    @Override
+    public String toString() {
+        return code;
+    }
 }
