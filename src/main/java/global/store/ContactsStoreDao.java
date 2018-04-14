@@ -15,4 +15,6 @@ public interface ContactsStoreDao<T> extends AbstractDbDao<T> {
     void delete(AddressLabel data);
 
     List<AddressLabel> getMyAddresses();
+
+    List<AddressLabel> getContacts();
 }
