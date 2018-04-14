@@ -170,7 +170,7 @@ public class PivxModuleImp implements PivxModule {
 
     @Override
     public List<AddressLabel> getContacts(){
-        return contactsStore.list();
+        return contactsStore.getContacts();
     }
 
     @Override
