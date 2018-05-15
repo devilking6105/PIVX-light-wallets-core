@@ -126,7 +126,9 @@ public class WalletManager {
 
     private void initMnemonicCode(){
         try {
-            MnemonicCode.INSTANCE = new MnemonicCode(contextWrapper.openAssestsStream(conf.getMnemonicFilename()), null);
+            InputStream inputStream = contextWrapper.openAssestsStream(conf.getMnemonicFilename());
+            System.out.println(inputStream);
+            MnemonicCode.INSTANCE = new MnemonicCode(inputStream, null);
         } catch (IOException e) {
             e.printStackTrace();
         }
