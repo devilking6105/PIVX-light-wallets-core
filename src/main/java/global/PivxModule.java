@@ -9,6 +9,7 @@ import org.pivxj.core.Transaction;
 import org.pivxj.core.TransactionInput;
 import org.pivxj.core.TransactionOutput;
 import org.pivxj.crypto.DeterministicKey;
+import org.pivxj.crypto.KeyCrypter;
 import org.pivxj.crypto.MnemonicException;
 import org.pivxj.wallet.DeterministicKeyChain;
 import org.pivxj.wallet.Wallet;
@@ -25,6 +26,7 @@ import global.wrappers.TransactionWrapper;
 import global.exceptions.CantSweepBalanceException;
 import global.exceptions.ContactAlreadyExistException;
 import global.exceptions.NoPeerConnectedException;
+import org.spongycastle.crypto.params.KeyParameter;
 import wallet.exceptions.InsufficientInputsException;
 import wallet.exceptions.TxNotFoundException;
 import wallet.exceptions.CantRestoreEncryptedWallet;
@@ -165,4 +167,13 @@ public interface PivxModule {
     List<PivxRate> listRates();
 
     List<String> getAvailableMnemonicWordsList();
+
+    /**
+     * Encrypt the wallet
+     * @param password
+     * @return
+     */
+    boolean encrypt(String password);
+    boolean decrypt(String password);
+    boolean isWalletLocked();
 }

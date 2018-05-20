@@ -14,6 +14,7 @@ import org.pivxj.core.TransactionInput;
 import org.pivxj.core.TransactionOutput;
 import org.pivxj.core.listeners.TransactionConfidenceEventListener;
 import org.pivxj.crypto.DeterministicKey;
+import org.pivxj.crypto.KeyCrypter;
 import org.pivxj.crypto.MnemonicException;
 import org.pivxj.script.Script;
 import org.pivxj.wallet.DeterministicKeyChain;
@@ -46,6 +47,8 @@ import global.wrappers.TransactionWrapper;
 import global.exceptions.CantSweepBalanceException;
 import global.exceptions.ContactAlreadyExistException;
 import global.exceptions.NoPeerConnectedException;
+import org.spongycastle.crypto.params.KeyParameter;
+import org.spongycastle.util.encoders.Hex;
 import wallet.exceptions.InsufficientInputsException;
 import wallet.exceptions.TxNotFoundException;
 import wallet.WalletManager;
@@ -649,6 +652,37 @@ public class PivxModuleImp implements PivxModule {
     @Override
     public List<String> getAvailableMnemonicWordsList() {
         return walletManager.getAvailableMnemonicWordsList();
+    }
+
+    @Override
+    public boolean encrypt(String password) {
+        walletManager.getWallet().encrypt(password);
+        logger.info("Wallet encrypted");
+        return true;
+    }
+
+    public boolean encrypt(KeyCrypter keyCrypter,KeyParameter keyParameter) {
+        logger.info("Encrypt with key: "+ Hex.toHexString(keyParameter.getKey()));
+        walletManager.getWallet().encrypt(keyCrypter, keyParameter);
+        return true;
+    }
+
+    @Override
+    public boolean decrypt(String password) {
+        walletManager.getWallet().decrypt(password);
+        return true;
+    }
+
+
+    public boolean decrypt(KeyParameter keyParameter) {
+        logger.info("Decrypt with key: "+ Hex.toHexString(keyParameter.getKey()));
+        walletManager.getWallet().decrypt(keyParameter);
+        return true;
+    }
+
+    @Override
+    public boolean isWalletLocked() {
+        return walletManager.getWallet().isEncrypted();
     }
 
 
