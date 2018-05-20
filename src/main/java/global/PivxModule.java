@@ -16,6 +16,7 @@ import org.pivxj.wallet.Wallet;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Set;
@@ -173,7 +174,7 @@ public interface PivxModule {
      * @param password
      * @return
      */
-    boolean encrypt(String password);
-    boolean decrypt(String password);
+    boolean encrypt(String password) throws UnsupportedEncodingException;
+    boolean decrypt(String password) throws UnsupportedEncodingException;
     boolean isWalletLocked();
 }

@@ -26,7 +26,9 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -48,6 +50,7 @@ import global.exceptions.CantSweepBalanceException;
 import global.exceptions.ContactAlreadyExistException;
 import global.exceptions.NoPeerConnectedException;
 import org.spongycastle.crypto.params.KeyParameter;
+import org.spongycastle.util.encoders.Base64;
 import org.spongycastle.util.encoders.Hex;
 import wallet.exceptions.InsufficientInputsException;
 import wallet.exceptions.TxNotFoundException;
@@ -655,28 +658,31 @@ public class PivxModuleImp implements PivxModule {
     }
 
     @Override
-    public boolean encrypt(String password) {
+    public boolean encrypt(String password) throws UnsupportedEncodingException {
+        password = new String(Base64.encode(password.getBytes("UTF-8")), StandardCharsets.UTF_8);
         walletManager.getWallet().encrypt(password);
         logger.info("Wallet encrypted");
         return true;
     }
 
     public boolean encrypt(KeyCrypter keyCrypter,KeyParameter keyParameter) {
-        logger.info("Encrypt with key: "+ Hex.toHexString(keyParameter.getKey()));
         walletManager.getWallet().encrypt(keyCrypter, keyParameter);
+        logger.info("Wallet encrypted");
         return true;
     }
 
     @Override
-    public boolean decrypt(String password) {
+    public boolean decrypt(String password) throws UnsupportedEncodingException {
+        password = new String(Base64.encode(password.getBytes("UTF-8")), StandardCharsets.UTF_8);
         walletManager.getWallet().decrypt(password);
+        logger.info("Wallet decrypted");
         return true;
     }
 
 
     public boolean decrypt(KeyParameter keyParameter) {
-        logger.info("Decrypt with key: "+ Hex.toHexString(keyParameter.getKey()));
         walletManager.getWallet().decrypt(keyParameter);
+        logger.info("Wallet decrypted");
         return true;
     }
 
