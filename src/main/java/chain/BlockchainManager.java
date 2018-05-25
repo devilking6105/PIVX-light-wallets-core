@@ -262,7 +262,7 @@ public class BlockchainManager {
                 final String trustedPeerHost = conf.getTrustedNodeHost();
                 final boolean hasTrustedPeer = trustedPeerHost != null;
 
-                final boolean connectTrustedPeerOnly = true;//hasTrustedPeer && config.getTrustedPeerOnly();
+                final boolean connectTrustedPeerOnly = (trustedPeerHost != null) ? true : false;//hasTrustedPeer && config.getTrustedPeerOnly();
                 peerGroup.setMaxConnections(connectTrustedPeerOnly ? 1 : maxConnectedPeers);
                 peerGroup.setConnectTimeoutMillis(conf.getPeerTimeoutMs());
                 peerGroup.setPeerDiscoveryTimeoutMillis(conf.getPeerDiscoveryTimeoutMs());
@@ -292,7 +292,7 @@ public class BlockchainManager {
                         @Override
                         public InetSocketAddress[] getPeers(final long services, final long timeoutValue, final TimeUnit timeoutUnit)
                                 throws PeerDiscoveryException {
-                            final List<InetSocketAddress> peers = new LinkedList<InetSocketAddress>();
+                            final List<InetSocketAddress> peers = new LinkedList<>();
 
                             boolean needsTrimPeersWorkaround = false;
 
