@@ -13,7 +13,7 @@ public class PivtrumGlobalData {
 
     public static final String FURSZY_TESTNET_SERVER = "185.101.98.175";
 
-    public static final String[] TRUSTED_NODES = new String[]{"node.pivxwiki.org", "pivx.warrows.fr"};
+    public static final String[] TRUSTED_NODES = new String[]{"node.pivxwiki.org", "panther.pivxwiki.org", "pivx.warrows.fr"};
 
     public static final List<PivtrumPeerData> listTrustedHosts(){
         List<PivtrumPeerData> list = new ArrayList<>();
