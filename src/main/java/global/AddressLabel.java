@@ -94,4 +94,6 @@ public class AddressLabel implements Serializable{
     public void setIsMine(boolean isMine) {
         this.isMyAdrress = isMine;
     }
+
+
 }
