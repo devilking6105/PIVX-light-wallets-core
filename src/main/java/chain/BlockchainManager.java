@@ -266,10 +266,7 @@ public class BlockchainManager {
                 peerGroup.setMaxConnections(connectTrustedPeerOnly ? 1 : maxConnectedPeers);
                 peerGroup.setConnectTimeoutMillis(conf.getPeerTimeoutMs());
                 peerGroup.setPeerDiscoveryTimeoutMillis(conf.getPeerDiscoveryTimeoutMs());
-
-                if (conf.isTest()){
-                    peerGroup.setMinBroadcastConnections(1);
-                }
+                peerGroup.setMinBroadcastConnections(1);
 
                 if (conf.getNetworkParams().equals(RegTestParams.get())) {
                     peerGroup.addPeerDiscovery(new PeerDiscovery() {
