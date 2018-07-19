@@ -253,8 +253,13 @@ public class BlockchainManager {
                 peerGroup.setDownloadTxDependencies(0); // recursive implementation causes StackOverflowError
                 walletManager.addWalletFrom(peerGroup);
                 peerGroup.setUserAgent(USER_AGENT, context.getVersionName());
-                peerGroup.addConnectedEventListener(executor,peerConnectivityListener);
-                peerGroup.addDisconnectedEventListener(executor,peerDisconnectedEventListener);
+                if (executor != null) {
+                    peerGroup.addConnectedEventListener(executor, peerConnectivityListener);
+                    peerGroup.addDisconnectedEventListener(executor, peerDisconnectedEventListener);
+                }else {
+                    peerGroup.addConnectedEventListener(peerConnectivityListener);
+                    peerGroup.addDisconnectedEventListener(peerDisconnectedEventListener);
+                }
 
                 // Memory check
                 final int maxConnectedPeers = context.isMemoryLow() ? 4 : 6 ;

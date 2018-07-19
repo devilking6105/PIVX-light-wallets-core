@@ -695,4 +695,9 @@ public class PivxModuleImp implements PivxModule {
     public void saveRate(PivxRate pivxRate){
         rateDb.insertOrUpdateIfExist(pivxRate);
     }
+
+
+    public Wallet getWallet(){
+        return walletManager.getWallet();
+    }
 }
