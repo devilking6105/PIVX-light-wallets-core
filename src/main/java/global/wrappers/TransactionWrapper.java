@@ -18,8 +18,8 @@ public class TransactionWrapper implements Serializable{
         SENT_SINGLE,
         RECEIVE,
         STAKE,
-        ZC_SPEND
-        ;
+        ZC_SPEND,
+        ZC_MINT;
 
     }
 
@@ -30,15 +30,17 @@ public class TransactionWrapper implements Serializable{
     private Map<Integer,AddressLabel> inputsLabels;
     private Coin amount;
     private TransactionUse transactionUse;
+    private boolean isPrivate;
 
 
-    public TransactionWrapper(Transaction transaction, Map<Integer,AddressLabel> inputsLabels, Map<Integer,AddressLabel> outputLabels, Coin amount, TransactionUse transactionUse) {
+    public TransactionWrapper(Transaction transaction, Map<Integer,AddressLabel> inputsLabels, Map<Integer,AddressLabel> outputLabels, Coin amount, TransactionUse transactionUse, boolean isPrivate) {
         this.transaction = transaction;
         this.txId = transaction.getHash();
         this.inputsLabels = inputsLabels;
         this.outputLabels = outputLabels;
         this.amount = amount;
         this.transactionUse = transactionUse;
+        this.isPrivate = isPrivate;
     }
 
 
@@ -80,6 +82,14 @@ public class TransactionWrapper implements Serializable{
 
     public boolean isZcSpend(){
         return transactionUse == TransactionUse.ZC_SPEND;
+    }
+
+    public boolean isZcMint() {
+        return transactionUse == TransactionUse.ZC_MINT;
+    }
+
+    public boolean isPrivate() {
+        return isPrivate;
     }
 
     @Override

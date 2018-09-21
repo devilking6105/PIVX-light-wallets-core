@@ -66,8 +66,16 @@ public class Io {
      * @throws IOException Exception when problem occurs during deleting the directory.
      */
     public static void delete(File file) throws IOException {
-
-        for (File childFile : file.listFiles()) {
+        if(file == null){
+            log.info("Trying to delete a null file??");
+            return;
+        }
+        File[] array = file.listFiles();
+        if (array == null){
+            log.info("Trying to delete a null list of files??");
+            return;
+        }
+        for (File childFile : array) {
 
             if (childFile.isDirectory()) {
                 delete(childFile);

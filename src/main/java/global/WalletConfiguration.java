@@ -15,6 +15,7 @@ public interface WalletConfiguration {
     String getTrustedNodeHost();
 
     void saveTrustedNode(String host,int port);
+    void cleanTrustedNode();
 
     void saveScheduleBlockchainService(long time);
 

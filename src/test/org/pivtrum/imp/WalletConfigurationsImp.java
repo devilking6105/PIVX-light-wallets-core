@@ -31,6 +31,11 @@ public class WalletConfigurationsImp implements WalletConfiguration {
     }
 
     @Override
+    public void cleanTrustedNode() {
+
+    }
+
+    @Override
     public void saveScheduleBlockchainService(long time) {
 
     }

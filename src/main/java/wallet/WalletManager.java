@@ -1,10 +1,13 @@
 package wallet;
 
 import com.google.common.base.Charsets;
+import com.zerocoinj.core.ZCoin;
+import com.zerocoinj.utils.JniBridgeWrapper;
 
 import org.pivxj.core.Address;
 import org.pivxj.core.BlockChain;
 import org.pivxj.core.Coin;
+import org.pivxj.core.Context;
 import org.pivxj.core.InsufficientMoneyException;
 import org.pivxj.core.PeerGroup;
 import org.pivxj.core.Sha256Hash;
@@ -23,7 +26,6 @@ import org.pivxj.wallet.Protos;
 import org.pivxj.wallet.SendRequest;
 import org.pivxj.wallet.UnreadableWalletException;
 import org.pivxj.wallet.Wallet;
-import org.pivxj.wallet.WalletFiles;
 import org.pivxj.wallet.WalletProtobufSerializer;
 import org.pivxj.wallet.listeners.WalletCoinsReceivedEventListener;
 import org.slf4j.Logger;
@@ -42,15 +44,24 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
+import java.math.BigInteger;
 import java.security.SecureRandom;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import global.ContextWrapper;
 import global.WalletConfiguration;
 import global.utils.Io;
+import host.furszy.zerocoinj.wallet.AmountPerDen;
+import host.furszy.zerocoinj.wallet.CannotSpendCoinsException;
+import host.furszy.zerocoinj.wallet.MultiWallet;
+import host.furszy.zerocoinj.wallet.files.Listener;
 import wallet.exceptions.InsufficientInputsException;
 import wallet.exceptions.TxNotFoundException;
 
@@ -68,11 +79,13 @@ public class WalletManager {
     private static final int ENTROPY_SIZE_DEBUG = -1;
 
 
-    private Wallet wallet;
+    private MultiWallet wallet;
     private File walletFile;
 
     private WalletConfiguration conf;
     private ContextWrapper contextWrapper;
+
+    public AtomicBoolean isStarted = new AtomicBoolean(false);
 
     public WalletManager(ContextWrapper contextWrapper, WalletConfiguration conf) {
         this.conf = conf;
@@ -80,7 +93,6 @@ public class WalletManager {
     }
 
     // methods
-
     public Address newFreshReceiveAddress() {
         return wallet.freshReceiveAddress();
     }
@@ -91,7 +103,7 @@ public class WalletManager {
      * @return
      */
     public Address getCurrentAddress() {
-        return wallet.currentReceiveAddress();
+        return wallet.getCurrentReceiveAddress();
     }
 
     public List<Address> getIssuedReceiveAddresses() {
@@ -108,11 +120,11 @@ public class WalletManager {
     }
 
     public boolean isWatchingAddress(Address address){
-        return wallet.isAddressWatched(address);
+        return wallet.isWatchingAddress(address);
     }
 
     public void completeSend(SendRequest sendRequest) throws InsufficientMoneyException {
-        wallet.completeTx(sendRequest);
+        wallet.completeSend(sendRequest);
     }
 
     // init
@@ -122,6 +134,23 @@ public class WalletManager {
         initMnemonicCode();
 
         restoreOrCreateWallet();
+
+        // TODO: REMOVE ME..
+//        Transaction tx = null;
+//        for (Transaction transaction : wallet.getPivWallet().getTransactions(true)) {
+//            for (TransactionInput input : transaction.getInputs()) {
+//                if (input.getScriptSig().isZcSpend()){
+//                    tx = transaction;
+//                    break;
+//                }
+//            }
+//            if (tx != null) break;
+//        }
+//        if (tx != null)
+//        wallet.addTx(tx, MultiWallet.WalletType.ZPIV);
+
+        // started
+        isStarted.set(true);
     }
 
     private void initMnemonicCode(){
@@ -144,7 +173,7 @@ public class WalletManager {
             FileInputStream walletStream = null;
             try {
                 walletStream = new FileInputStream(walletFile);
-                wallet = new WalletProtobufSerializer().readWallet(walletStream);
+                wallet = new WalletProtobufSerializer().readMultiWallet(walletStream,false,null);
 
                 if (!wallet.getParams().equals(conf.getNetworkParams()))
                     throw new UnreadableWalletException("bad wallet network parameters: " + wallet.getParams().getId());
@@ -186,22 +215,21 @@ public class WalletManager {
             logger.info("new wallet created");
         }
 
-        wallet.addCoinsReceivedEventListener(new WalletCoinsReceivedEventListener() {
-            @Override
-            public void onCoinsReceived(Wallet wallet, Transaction transaction, Coin coin, Coin coin1) {
-                org.pivxj.core.Context.propagate(conf.getWalletContext());
-                saveWallet();
-            }
-        });
+//        wallet.addCoinsReceivedEventListener(
+//                ,
+//                (wallet, transaction, coin, coin1) -> {
+//                    Context.propagate(conf.getWalletContext());
+//                    saveWallet();
+//                });
     }
 
-    public Wallet generateRandomWallet(){
+    public MultiWallet generateRandomWallet(){
         if (Utils.isAndroidRuntime()) {
             new LinuxSecureRandom();
         }
         List<String> words = generateMnemonic(SEED_ENTROPY_EXTRA);
         DeterministicSeed seed = new DeterministicSeed(words, null, "", System.currentTimeMillis());
-        return Wallet.fromSeed(conf.getNetworkParams(), seed, DeterministicKeyChain.KeyChainType.BIP44_PIVX_ONLY);
+        return new MultiWallet(conf.getNetworkParams(), Context.get().zerocoinContext, seed);
     }
 
     public static List<String> generateMnemonic(int entropyBitsSize){
@@ -248,12 +276,12 @@ public class WalletManager {
      *
      * @return
      */
-    private Wallet restoreWalletFromBackup() {
+    private MultiWallet restoreWalletFromBackup() {
 
         InputStream is = null;
         try {
             is = contextWrapper.openFileInput(conf.getKeyBackupProtobuf());
-            final Wallet wallet = new WalletProtobufSerializer().readWallet(is, true, null);
+            final MultiWallet wallet = new WalletProtobufSerializer().readMultiWallet(is, true, null);
             if (!wallet.isConsistent())
                 throw new Error("Inconsistent backup");
             // todo: acá tengo que resetear la wallet
@@ -278,10 +306,10 @@ public class WalletManager {
 
     public void restoreWalletFrom(List<String> mnemonic, long timestamp, boolean bip44) throws IOException, MnemonicException {
         MnemonicCode.INSTANCE.check(mnemonic);
-        wallet = Wallet.fromSeed(
+        wallet = new MultiWallet(
                 conf.getNetworkParams(),
-                new DeterministicSeed(mnemonic,null,"",timestamp),
-                bip44? DeterministicKeyChain.KeyChainType.BIP44_PIVX_ONLY: DeterministicKeyChain.KeyChainType.BIP32
+                conf.getWalletContext().zerocoinContext,
+                new DeterministicSeed(mnemonic,null,"",timestamp)
         );
         restoreWallet(wallet);
     }
@@ -303,7 +331,7 @@ public class WalletManager {
      * @param wallet
      * @throws IOException
      */
-    private void protobufSerializeWallet(final Wallet wallet) throws IOException {
+    private void protobufSerializeWallet(final MultiWallet wallet) throws IOException {
         logger.info("trying to serialize: " + walletFile.getAbsolutePath());
         wallet.saveToFile(walletFile);
         // make wallets world accessible in test mode
@@ -319,14 +347,18 @@ public class WalletManager {
      */
     private void backupWallet() {
 
-        final Protos.Wallet.Builder builder = new WalletProtobufSerializer().walletToProto(wallet).toBuilder();
+        final Protos.MultiWallet.Builder builder = new WalletProtobufSerializer().walletToProto(wallet);
 
-        // strip redundant
-        builder.clearTransaction();
-        builder.clearLastSeenBlockHash();
-        builder.setLastSeenBlockHeight(-1);
-        builder.clearLastSeenBlockTimeSecs();
-        final Protos.Wallet walletProto = builder.build();
+        for (Protos.Wallet w : builder.getWalletsList()) {
+            // strip redundant
+            Protos.Wallet.Builder wBuilder = w.toBuilder();
+            wBuilder.clearTransaction();
+            wBuilder.clearLastSeenBlockHash();
+            wBuilder.setLastSeenBlockHeight(-1);
+            wBuilder.clearLastSeenBlockTimeSecs();
+        }
+
+        final Protos.MultiWallet walletProto = builder.build();
 
         OutputStream os = null;
 
@@ -367,9 +399,9 @@ public class WalletManager {
      * @param password
      * @throws IOException
      */
-    public boolean backupWallet(Wallet wallet,File file, final String password) throws IOException {
+    public boolean backupWallet(MultiWallet wallet,File file, final String password) throws IOException {
 
-        final Protos.Wallet walletProto = new WalletProtobufSerializer().walletToProto(wallet);
+        final Protos.MultiWallet walletProto = new WalletProtobufSerializer().walletToProto(wallet).build();
 
         Writer cipherOut = null;
 
@@ -410,15 +442,15 @@ public class WalletManager {
     }
 
     public void addWalletFrom(PeerGroup peerGroup) {
-        peerGroup.addWallet(wallet);
+        wallet.addPeergroup(peerGroup);
     }
 
     public void addWalletFrom(BlockChain blockChain) {
-        blockChain.addWallet(wallet);
+        wallet.addWalletFrom(blockChain);
     }
 
     public void removeWalletFrom(PeerGroup peerGroup) {
-        peerGroup.removeWallet(wallet);
+        wallet.removePeergroup(peerGroup);
     }
 
     public int getLastBlockSeenHeight() {
@@ -429,8 +461,8 @@ public class WalletManager {
         return wallet.getTransaction(hash);
     }
 
-    public void addCoinsReceivedEventListener(WalletCoinsReceivedEventListener coinReceiverListener) {
-        wallet.addCoinsReceivedEventListener(coinReceiverListener);
+    public void addCoinsReceivedEventListener(ExecutorService executor, WalletCoinsReceivedEventListener coinReceiverListener) {
+        wallet.addCoinsReceivedEventListener(coinReceiverListener, executor);
     }
 
     public void removeCoinsReceivedEventListener(WalletCoinsReceivedEventListener coinReceiverListener) {
@@ -438,15 +470,22 @@ public class WalletManager {
     }
 
     public Coin getAvailableBalance() {
-        return wallet.getBalance(Wallet.BalanceType.AVAILABLE);
+        return wallet.getAvailableBalance();
     }
 
     public Coin getValueSentFromMe(Transaction transaction) {
-        return transaction.getValueSentFromMe(wallet);
+        try {
+            return wallet.getValueSentFromMe(transaction);
+        }catch (Exception e){
+            System.out.println("Error in transaction: " + transaction);
+            System.out.println("inputs: " + Arrays.toString(transaction.getInputs().toArray()));
+            e.printStackTrace();
+            throw e;
+        }
     }
 
     public Coin getValueSentToMe(Transaction transaction) {
-        return transaction.getValueSentToMe(wallet);
+        return wallet.getValueSentToMe(transaction);
     }
 
 
@@ -454,7 +493,7 @@ public class WalletManager {
         FileInputStream is = null;
         try {
             is = new FileInputStream(file);
-            restoreWallet(WalletUtils.restoreWalletFromProtobuf(is, conf.getNetworkParams()));
+            restoreWallet(WalletUtils.restoreMultiWalletFromProtobuf(is, conf.getNetworkParams()));
             logger.info("successfully restored unencrypted wallet: {}", file);
         } finally {
             if (is != null) {
@@ -467,7 +506,7 @@ public class WalletManager {
         }
     }
 
-    private void restoreWallet(final Wallet wallet) throws IOException {
+    private void restoreWallet(final MultiWallet wallet) throws IOException {
 
         replaceWallet(wallet);
 
@@ -478,7 +517,7 @@ public class WalletManager {
 
     }
 
-    public void replaceWallet(final Wallet newWallet) throws IOException {
+    public void replaceWallet(final MultiWallet newWallet) throws IOException {
         resetBlockchain();
 
         try {
@@ -509,7 +548,7 @@ public class WalletManager {
         final byte[] plainText = Crypto.decryptBytes(cipherText.toString(), password.toCharArray());
         final InputStream is = new ByteArrayInputStream(plainText);
 
-        restoreWallet(WalletUtils.restoreWalletFromProtobufOrBase58(is, conf.getNetworkParams(), conf.getBackupMaxChars()));
+        restoreWallet(WalletUtils.restoreMultiWalletFromProtobufOrBase58(is, conf.getNetworkParams(), conf.getBackupMaxChars()));
 
         logger.info("successfully restored encrypted wallet: {}", file);
     }
@@ -520,11 +559,12 @@ public class WalletManager {
      */
     public void watchOnlyMode(String xpub, DeterministicKeyChain.KeyChainType keyChainType) throws IOException {
         Wallet wallet = Wallet.fromWatchingKeyB58(conf.getNetworkParams(),xpub,0,keyChainType);
-        restoreWallet(wallet);
+        MultiWallet multiWallet = new MultiWallet(wallet);
+        restoreWallet(multiWallet);
     }
 
     public Set<Transaction> listTransactions() {
-        return wallet.getTransactions(true);
+        return wallet.listTransactions();
     }
 
     /**
@@ -537,23 +577,23 @@ public class WalletManager {
     }
 
     public void commitTx(Transaction transaction) {
-        wallet.maybeCommitTx(transaction);
+        wallet.commitTx(transaction);
     }
 
     public Coin getUnspensableBalance() {
-        return wallet.getBalance(Wallet.BalanceType.ESTIMATED).minus(wallet.getBalance(Wallet.BalanceType.AVAILABLE));
+        return wallet.getUnspensableBalance();
     }
 
     public boolean isAddressMine(Address address) {
-        return wallet.isPubKeyHashMine(address.getHash160());
+        return wallet.isAddressMine(address);
     }
 
-    public void addOnTransactionsConfidenceChange(TransactionConfidenceEventListener transactionConfidenceEventListener) {
-        wallet.addTransactionConfidenceEventListener(transactionConfidenceEventListener);
+    public void addOnTransactionsConfidenceChange(ExecutorService executor, TransactionConfidenceEventListener transactionConfidenceEventListener) {
+        wallet.addOnTransactionsConfidenceChange(executor, transactionConfidenceEventListener);
     }
 
     public void removeTransactionConfidenceChange(TransactionConfidenceEventListener transactionConfidenceEventListener) {
-        wallet.removeTransactionConfidenceEventListener(transactionConfidenceEventListener);
+        wallet.removeTransactionConfidenceChange(transactionConfidenceEventListener);
     }
 
     /**
@@ -562,22 +602,20 @@ public class WalletManager {
      * @return
      */
     @Deprecated
-    public Wallet getWallet() {
+    public MultiWallet getWallet() {
         return wallet;
     }
 
     public List<TransactionOutput> listUnspent() {
-        return wallet.getUnspents();
+        return wallet.listUnspent();
     }
 
     public List<String> getMnemonic() {
-        return wallet.getActiveKeyChain().getMnemonicCode();
+        return wallet.getMnemonic();
     }
 
     public DeterministicKey getKeyPairForAddress(Address address) {
-        DeterministicKey deterministicKey = wallet.getActiveKeyChain().findKeyFromPubHash(address.getHash160());
-        logger.info("Key pub: "+deterministicKey.getPublicKeyAsHex());
-        return deterministicKey;
+        return wallet.getKeyPairForAddress(address);
     }
 
     /**
@@ -585,7 +623,7 @@ public class WalletManager {
      * @return
      */
     public boolean isWatchOnly(){
-        return wallet.isWatching();
+        return false;//wallet.isWatchOnly();
     }
 
     public TransactionOutput getUnspent(Sha256Hash parentTxHash, int index) throws TxNotFoundException {
@@ -597,7 +635,7 @@ public class WalletManager {
     public List<TransactionOutput> getRandomListUnspentNotInListToFullCoins(List<TransactionInput> inputs,Coin amount) throws InsufficientInputsException {
         List<TransactionOutput> list = new ArrayList<>();
         Coin total = Coin.ZERO;
-        for (TransactionOutput transactionOutput : wallet.getUnspents()) {
+        for (TransactionOutput transactionOutput : wallet.listUnspent()) {
             boolean found = false;
             if (inputs!=null) {
                 for (TransactionInput input : inputs) {
@@ -632,15 +670,15 @@ public class WalletManager {
     }
 
     public DeterministicKey getWatchingPubKey() {
-        return wallet.getWatchingKey();
+        return wallet.getWatchingPubKey();
     }
 
     public String getExtPubKey() {
-        return wallet.getWatchingKey().serializePubB58(conf.getNetworkParams());
+        return wallet.getWatchingPubKey().serializePubB58(conf.getNetworkParams());
     }
 
     public boolean isBip32Wallet() {
-        return wallet.getActiveKeyChain().getKeyChainType() == DeterministicKeyChain.KeyChainType.BIP32;
+        return false;
     }
 
     /**
@@ -650,7 +688,7 @@ public class WalletManager {
      */
     public Transaction createCleanWalletTx(Address sweepAddress) throws InsufficientMoneyException {
         SendRequest sendRequest = SendRequest.emptyWallet(sweepAddress);
-        wallet.completeTx(sendRequest);
+        wallet.completeSend(sendRequest);
         return sendRequest.tx;
     }
 
@@ -658,7 +696,68 @@ public class WalletManager {
         return MnemonicCode.INSTANCE.getWordList();
     }
 
-    private static final class WalletAutosaveEventListener implements WalletFiles.Listener {
+    public Coin getZpivAvailableBalance() {
+        return wallet.getZpivAvailableBalance();
+    }
+
+    public Coin getZpivUnspendableBalance(){
+        return wallet.getZpivUnspensableBalance();
+    }
+
+    public SendRequest createMint(Coin value) throws InsufficientMoneyException {
+        return wallet.createMintRequest(value);
+    }
+
+    public SendRequest createSpend(Address to, Coin amount) throws InsufficientMoneyException {
+        return wallet.createSpendRequest(to,amount);
+    }
+
+    public Transaction spendZpiv(SendRequest sendRequest, PeerGroup peerGroup, ExecutorService executor, JniBridgeWrapper wrapper) throws InsufficientMoneyException, CannotSpendCoinsException {
+        return wallet.spendZpiv(sendRequest,peerGroup, executor, wrapper);
+    }
+
+    public Set<Transaction> listPrivateTransactions() {
+        return wallet.getZPivWallet().getWallet().getTransactions(true);
+    }
+
+    public Coin getZpivValueSentToMe(Transaction transaction) {
+        return wallet.getZPivWallet().getValueSentToMe(transaction);
+    }
+
+    public Coin getZpivValueSentFromMe(Transaction transaction) {
+        return wallet.getZPivWallet().getValueSentFromMe(transaction);
+    }
+
+    public Collection<Transaction> listPendingTransactions() {
+        return wallet.listPendingTransactions();
+    }
+
+    public List<TransactionOutput> listZpivUnspent() {
+        return wallet.listZpivUnspent();
+    }
+
+    public ZCoin getAssociatedCoin(BigInteger commitmentValue) {
+        return wallet.getZcoinAssociated(commitmentValue);
+    }
+
+    public ZCoin getAssociatedCoinToSerial(BigInteger serial) {
+        return wallet.getZcoinAssociatedToSerial(serial);
+    }
+
+    public TransactionOutput getMintOutput(BigInteger serialNumber) {
+        return wallet.getMintTransaction(serialNumber, MultiWallet.WalletType.ALL);
+    }
+
+    public List<AmountPerDen> listAmountPerDen() {
+        return wallet.listAmountPerDen();
+    }
+
+    public boolean isStarted() {
+        return isStarted.get();
+    }
+
+
+    private static final class WalletAutosaveEventListener implements Listener {
 
         WalletConfiguration conf;
 

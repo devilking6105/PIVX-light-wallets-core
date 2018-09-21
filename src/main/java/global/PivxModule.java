@@ -1,25 +1,32 @@
 package global;
 
+import com.zerocoinj.core.ZCoin;
+
 import org.pivxj.core.Address;
 import org.pivxj.core.Coin;
+import org.pivxj.core.Context;
 import org.pivxj.core.InsufficientMoneyException;
 import org.pivxj.core.Peer;
+import org.pivxj.core.PeerGroup;
 import org.pivxj.core.Sha256Hash;
 import org.pivxj.core.Transaction;
 import org.pivxj.core.TransactionInput;
 import org.pivxj.core.TransactionOutput;
 import org.pivxj.crypto.DeterministicKey;
-import org.pivxj.crypto.KeyCrypter;
 import org.pivxj.crypto.MnemonicException;
 import org.pivxj.wallet.DeterministicKeyChain;
-import org.pivxj.wallet.Wallet;
+import org.pivxj.wallet.SendRequest;
 
 import java.io.File;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.util.Collection;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
 
 import global.exceptions.UpgradeException;
 import global.wrappers.InputWrapper;
@@ -27,7 +34,9 @@ import global.wrappers.TransactionWrapper;
 import global.exceptions.CantSweepBalanceException;
 import global.exceptions.ContactAlreadyExistException;
 import global.exceptions.NoPeerConnectedException;
-import org.spongycastle.crypto.params.KeyParameter;
+import host.furszy.zerocoinj.wallet.AmountPerDen;
+import host.furszy.zerocoinj.wallet.CannotSpendCoinsException;
+import host.furszy.zerocoinj.wallet.MultiWallet;
 import wallet.exceptions.InsufficientInputsException;
 import wallet.exceptions.TxNotFoundException;
 import wallet.exceptions.CantRestoreEncryptedWallet;
@@ -79,8 +88,10 @@ public interface PivxModule {
     long getAvailableBalance();
 
     Coin getAvailableBalanceCoin();
-
     Coin getUnnavailableBalanceCoin();
+
+    Coin getZpivAvailableBalanceCoin();
+    Coin getZpivUnnavailableBalanceCoin();
 
     boolean isWalletWatchOnly();
 
@@ -112,8 +123,13 @@ public interface PivxModule {
     WalletConfiguration getConf();
 
     List<TransactionWrapper> listTx();
+    List<TransactionWrapper> listPrivateTxes();
+
+    Collection<Transaction> listPendingTxes();
 
     Coin getValueSentFromMe(Transaction transaction, boolean excludeChangeAddress);
+    //
+    Coin getZpivValueSentToMe(Transaction transaction);
 
     void commitTx(Transaction transaction);
 
@@ -124,6 +140,7 @@ public interface PivxModule {
     PivxRate getRate(String selectedRateCoin);
 
     List<InputWrapper> listUnspentWrappers();
+    List<TransactionOutput> listZpivUnspents();
 
     Set<InputWrapper> convertFrom(List<TransactionInput> list) throws TxNotFoundException;
 
@@ -177,4 +194,17 @@ public interface PivxModule {
     boolean encrypt(String password) throws UnsupportedEncodingException;
     boolean decrypt(String password) throws UnsupportedEncodingException;
     boolean isWalletLocked();
+
+    //
+    SendRequest createMint(Coin value) throws InsufficientMoneyException;
+    SendRequest createSpend(Address to, Coin amount) throws InsufficientMoneyException;
+    Transaction spendZpiv(Context context, SendRequest sendRequest, PeerGroup peerGroup, ExecutorService executor) throws InsufficientMoneyException, CannotSpendCoinsException;
+
+    ZCoin getAssociatedCoin(BigInteger commitmentValue);
+
+    boolean isEveryOutputSpent(Transaction transaction, MultiWallet.WalletType type);
+
+    List<AmountPerDen> listAmountPerDen();
+
+    boolean isStarted();
 }
