@@ -406,9 +406,15 @@ public class PivxModuleImp implements PivxModule {
 
                 for (TransactionOutput transactionOutput : transaction.getOutputs()) {
                     try {
-                        address = transactionOutput.getScriptPubKey().getToAddress(getConf().getNetworkParams(), true);
-                        // if the tx is mine i know that the first output address is the sent and the second one is the change address
-                        outputsLabeled.put(transactionOutput.getIndex(), contactsStore.getContact(address.toBase58()));
+                        Script script = transactionOutput.getScriptPubKey();
+                        if (script.isZcMint()){
+                            AddressLabel addressLabel = new AddressLabel("Mint");
+                            outputsLabeled.put(transactionOutput.getIndex(), addressLabel);
+                        }else {
+                            address = transactionOutput.getScriptPubKey().getToAddress(getConf().getNetworkParams(), true);
+                            // if the tx is mine i know that the first output address is the sent and the second one is the change address
+                            outputsLabeled.put(transactionOutput.getIndex(), contactsStore.getContact(address.toBase58()));
+                        }
                     }catch (Exception e){
                         logger.error("Exception",e);
                     }

@@ -375,11 +375,11 @@ public class BlockchainManager {
                             //if (conf.getNetworkParams() instanceof MainNetParams){
                             //    peers.add(new InetSocketAddress(MAINNET_NODE,conf.getNetworkParams().getPort()));
                             //}
-                            if (peers.size() < 2) {
-                                for (PivtrumPeerData pivtrumPeerData : PivtrumGlobalData.listTrustedHosts(conf.getNetworkParams().getPort())) {
-                                    peers.add(new InetSocketAddress(pivtrumPeerData.getHost(), pivtrumPeerData.getTcpPort()));
-                                }
-                            }
+//                            if (peers.size() < 2) {
+//                                for (PivtrumPeerData pivtrumPeerData : PivtrumGlobalData.listTrustedHosts(conf.getNetworkParams().getPort())) {
+//                                    peers.add(new InetSocketAddress(pivtrumPeerData.getHost(), pivtrumPeerData.getTcpPort()));
+//                                }
+//                            }
 
                             if (!hasTrustedPeer && peers.isEmpty())
                                 peers.addAll(Arrays.asList(normalPeerDiscovery.getPeers(services, timeoutValue, timeoutUnit)));
