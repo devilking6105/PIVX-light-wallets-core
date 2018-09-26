@@ -376,8 +376,10 @@ public class PivxModuleImp implements PivxModule {
                             // if the tx is mine i know that the first output address is the sent and the second one is the change address
                             outputsLabeled.put(transactionOutput.getIndex(), contactsStore.getContact(address.toBase58()));
                             isStaking = true;
+                        }else if (script.isZcMint()){
+                            outputsLabeled.put(transactionOutput.getIndex(), new AddressLabel("Mint"));
                         }else {
-                            logger.warn("unknown tx output --> this is basically for the zc_mint or zc_spend.. FIXME");
+                            logger.warn("unknown tx output FIXME, " + script);
                         }
                     }
 

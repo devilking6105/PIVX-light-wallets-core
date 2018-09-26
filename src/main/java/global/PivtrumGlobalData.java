@@ -13,7 +13,7 @@ public class PivtrumGlobalData {
 
     // 7 --> new InetSocketAddress("2001:470:1f11:1d4:bc13:daff:fe53:da07", params.getPort());
     // 5 --> 2001:470:1f11:1d4:b81a:24ff:fea3:cd76
-    public static final String MAINNET_NODE = "185.101.98.230"; // --> está corriendo en testnet ahora..
+    public static final String MAINNET_NODE = "95.179.157.87"; // --> está corriendo en testnet ahora..
     public static final String FURSZY_TESTNET_SERVER = "2001:470:1f11:1d4:bc13:daff:fe53:da07";
     //"192.168.0.3"; //"185.101.98.175" "185.101.98.230";
 
