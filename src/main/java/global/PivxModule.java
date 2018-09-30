@@ -197,7 +197,7 @@ public interface PivxModule {
 
     //
     SendRequest createMint(Coin value) throws InsufficientMoneyException;
-    SendRequest createSpend(Address to, Coin amount) throws InsufficientMoneyException;
+    SendRequest createSpend(Address to, Coin amount, boolean mintChange) throws InsufficientMoneyException;
     Transaction spendZpiv(Context context, SendRequest sendRequest, PeerGroup peerGroup, ExecutorService executor) throws InsufficientMoneyException, CannotSpendCoinsException;
 
     ZCoin getAssociatedCoin(BigInteger commitmentValue);

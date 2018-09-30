@@ -708,8 +708,8 @@ public class WalletManager {
         return wallet.createMintRequest(value);
     }
 
-    public SendRequest createSpend(Address to, Coin amount) throws InsufficientMoneyException {
-        return wallet.createSpendRequest(to,amount);
+    public SendRequest createSpend(Address to, Coin amount, boolean mintChange) throws InsufficientMoneyException {
+        return wallet.createSpendRequest(to,amount, mintChange);
     }
 
     public Transaction spendZpiv(SendRequest sendRequest, PeerGroup peerGroup, ExecutorService executor, JniBridgeWrapper wrapper) throws InsufficientMoneyException, CannotSpendCoinsException {

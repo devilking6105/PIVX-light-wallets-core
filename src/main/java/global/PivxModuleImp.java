@@ -151,12 +151,12 @@ public class PivxModuleImp implements PivxModule {
 
     @Override
     public long getAvailableBalance() {
-        return walletManager.getAvailableBalance().longValue();//availableBalance;
+        return walletManager.getAvailableBalance().longValue();
     }
 
     @Override
     public Coin getAvailableBalanceCoin() {
-        return walletManager.getAvailableBalance();//availableBalance;
+        return walletManager.getAvailableBalance();
     }
 
     @Override
@@ -789,8 +789,8 @@ public class PivxModuleImp implements PivxModule {
     }
 
     @Override
-    public SendRequest createSpend(Address to, Coin amount) throws InsufficientMoneyException {
-        return walletManager.createSpend(to, amount);
+    public SendRequest createSpend(Address to, Coin amount, boolean mintChange) throws InsufficientMoneyException {
+        return walletManager.createSpend(to, amount, mintChange);
     }
 
     @Override
