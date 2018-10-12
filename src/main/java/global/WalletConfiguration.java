@@ -50,4 +50,6 @@ public interface WalletConfiguration {
     boolean isTest();
 
     int getProtocolVersion();
+
+    void maybeIncrementBestChainHeightEver(int lastBlockSeenHeight);
 }

@@ -171,7 +171,7 @@ public class WalletUtils
 
 	public static MultiWallet restoreMultiWalletFromProtobuf(final InputStream is, final NetworkParameters expectedNetworkParameters) throws IOException {
 		try {
-			final MultiWallet wallet = new WalletProtobufSerializer().readMultiWallet(is, true, null);
+			final MultiWallet wallet = new WalletProtobufSerializer().readMultiWallet(is, false, null);
 			if (!wallet.getParams().equals(expectedNetworkParameters))
 				throw new IOException("bad wallet backup network parameters: " + wallet.getParams().getId());
 			if (!wallet.isConsistent())

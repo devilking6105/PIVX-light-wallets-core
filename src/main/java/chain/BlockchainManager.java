@@ -217,10 +217,12 @@ public class BlockchainManager {
             LOG.info("peergroup stopped");
         }
 
-        try {
-            blockStore.close();
-        } catch (final BlockStoreException x) {
-            throw new RuntimeException(x);
+        if (blockStore != null) {
+            try {
+                blockStore.close();
+            } catch (final BlockStoreException x) {
+                throw new RuntimeException(x);
+            }
         }
 
         // save the wallet
@@ -319,33 +321,32 @@ public class BlockchainManager {
                             if (hasTrustedPeer) {
                                 LOG.info("trusted peer '" + trustedPeerHost + "'" + (hasTrustedPeer ? " only" : ""));
                                 final InetSocketAddress addr;
-                                if (trustedPeerHost.equals(FURSZY_TESTNET_SERVER) && !conf.isTest()){
-                                    addr = new InetSocketAddress(trustedPeerHost, 7776);
-                                }else {
-                                    int port = 0;
-                                    if (trustedPeerPort == 0){
-                                        port = conf.getNetworkParams().getPort();
-                                    }else
-                                        port = trustedPeerPort;
-                                    addr = new InetSocketAddress(trustedPeerHost, port);
 
-                                    if (addr.isUnresolved()) {
-                                        LOG.warn("Unresolved trusted peer, " + addr);
-                                        for (PivtrumPeerData pivtrumPeerData : PivtrumGlobalData.listTrustedHosts(conf.getNetworkParams().getPort())) {
-                                            InetSocketAddress socketAddress = new InetSocketAddress(pivtrumPeerData.getHost(), pivtrumPeerData.getTcpPort());
-                                            if (!socketAddress.isUnresolved()) {
-                                                peers.add(socketAddress);
-                                            }else {
-                                                LOG.warn("Unresolved peer, " + socketAddress);
-                                            }
+                                int port;
+                                if (trustedPeerPort == 0){
+                                    port = conf.getNetworkParams().getPort();
+                                }else
+                                    port = trustedPeerPort;
+
+                                addr = new InetSocketAddress(trustedPeerHost, port);
+
+                                if (addr.isUnresolved()) {
+                                    LOG.warn("Unresolved trusted peer, " + addr);
+                                    for (PivtrumPeerData pivtrumPeerData : PivtrumGlobalData.listTrustedHosts(conf.getNetworkParams().getPort())) {
+                                        InetSocketAddress socketAddress = new InetSocketAddress(pivtrumPeerData.getHost(), pivtrumPeerData.getTcpPort());
+                                        if (!socketAddress.isUnresolved()) {
+                                            peers.add(socketAddress);
+                                        }else {
+                                            LOG.warn("Unresolved peer, " + socketAddress);
                                         }
-                                        InetSocketAddress[] nodes = new InetSocketAddress[peers.size()];
-                                        for (int i = 0; i < peers.size(); i++) {
-                                            nodes[i] = peers.get(i);
-                                        }
-                                        return nodes;
                                     }
+                                    InetSocketAddress[] nodes = new InetSocketAddress[peers.size()];
+                                    for (int i = 0; i < peers.size(); i++) {
+                                        nodes[i] = peers.get(i);
+                                    }
+                                    return nodes;
                                 }
+
 
                                 if (addr.getAddress() != null) {
                                     peers.add(addr);

@@ -20,6 +20,7 @@ import org.pivxj.crypto.DeterministicKey;
 import org.pivxj.crypto.LinuxSecureRandom;
 import org.pivxj.crypto.MnemonicCode;
 import org.pivxj.crypto.MnemonicException;
+import org.pivxj.utils.Pair;
 import org.pivxj.wallet.DeterministicKeyChain;
 import org.pivxj.wallet.DeterministicSeed;
 import org.pivxj.wallet.Protos;
@@ -86,6 +87,7 @@ public class WalletManager {
     private ContextWrapper contextWrapper;
 
     public AtomicBoolean isStarted = new AtomicBoolean(false);
+    public AtomicBoolean isStarting = new AtomicBoolean(false);
 
     public WalletManager(ContextWrapper contextWrapper, WalletConfiguration conf) {
         this.conf = conf;
@@ -130,26 +132,14 @@ public class WalletManager {
     // init
 
     public void init() throws IOException {
+        isStarting.set(true);
         // init mnemonic code first..
         initMnemonicCode();
 
         restoreOrCreateWallet();
 
-        // TODO: REMOVE ME..
-//        Transaction tx = null;
-//        for (Transaction transaction : wallet.getPivWallet().getTransactions(true)) {
-//            for (TransactionInput input : transaction.getInputs()) {
-//                if (input.getScriptSig().isZcSpend()){
-//                    tx = transaction;
-//                    break;
-//                }
-//            }
-//            if (tx != null) break;
-//        }
-//        if (tx != null)
-//        wallet.addTx(tx, MultiWallet.WalletType.ZPIV);
-
         // started
+        isStarting.set(false);
         isStarted.set(true);
     }
 
@@ -169,15 +159,17 @@ public class WalletManager {
 
 
     private void loadWalletFromProtobuf(File walletFile) throws IOException {
+        boolean save = false;
         if (walletFile.exists()) {
             FileInputStream walletStream = null;
             try {
+                logger.info("#@#@# Wallet filename to restore: " + walletFile.getAbsolutePath());
                 walletStream = new FileInputStream(walletFile);
-                wallet = new WalletProtobufSerializer().readMultiWallet(walletStream,false,null);
-
-                if (!wallet.getParams().equals(conf.getNetworkParams()))
-                    throw new UnreadableWalletException("bad wallet network parameters: " + wallet.getParams().getId());
-
+                int version = 3;
+                Pair<MultiWallet, Boolean> pair = restoreWalletFromVersion(walletStream, walletFile, version);
+                wallet = pair.getFirst();
+                logger.warn("####### wallet: " + wallet.toString() );
+                save = pair.getSecond();
             } catch (UnreadableWalletException e) {
                 logger.error("problem loading wallet", e);
                 wallet = restoreWalletFromBackup();
@@ -215,6 +207,9 @@ public class WalletManager {
             logger.info("new wallet created");
         }
 
+        if (save){
+            saveWallet();
+        }
 //        wallet.addCoinsReceivedEventListener(
 //                ,
 //                (wallet, transaction, coin, coin1) -> {
@@ -256,6 +251,7 @@ public class WalletManager {
 
 
     private void afterLoadWallet() throws IOException {
+        logger.info("afterLoadWallet, autosave");
         wallet.autosaveToFile(walletFile, conf.getWalletAutosaveDelayMs(), TimeUnit.MILLISECONDS, new WalletAutosaveEventListener(conf));
         try {
             // clean up spam
@@ -281,7 +277,7 @@ public class WalletManager {
         InputStream is = null;
         try {
             is = contextWrapper.openFileInput(conf.getKeyBackupProtobuf());
-            final MultiWallet wallet = new WalletProtobufSerializer().readMultiWallet(is, true, null);
+            final MultiWallet wallet = new WalletProtobufSerializer().readMultiWallet(is, false, null);
             if (!wallet.isConsistent())
                 throw new Error("Inconsistent backup");
             // todo: acá tengo que resetear la wallet
@@ -477,9 +473,9 @@ public class WalletManager {
         try {
             return wallet.getValueSentFromMe(transaction);
         }catch (Exception e){
-            System.out.println("Error in transaction: " + transaction);
-            System.out.println("inputs: " + Arrays.toString(transaction.getInputs().toArray()));
-            e.printStackTrace();
+            //System.out.println("Error in transaction: " + transaction);
+            //System.out.println("inputs: " + Arrays.toString(transaction.getInputs().toArray()));
+            //e.printStackTrace();
             throw e;
         }
     }
@@ -520,13 +516,19 @@ public class WalletManager {
     public void replaceWallet(final MultiWallet newWallet) throws IOException {
         resetBlockchain();
 
-        try {
-            wallet.shutdownAutosaveAndWait();
-        } catch (Exception e) {
-            e.printStackTrace();
+        if (wallet != null && wallet.isAutosaveEnabled()) {
+            try {
+                wallet.shutdownAutosaveAndWait();
+            } catch (Exception e) {
+                logger.warn("shutdownAutosaveAndWait exception", e);
+            }
+        }else {
+            if (walletFile == null){
+                walletFile = contextWrapper.getFileStreamPath(conf.getWalletProtobufFilename());
+            }
         }
         wallet = newWallet;
-        //conf.maybeIncrementBestChainHeightEver(newWallet.getLastBlockSeenHeight());
+        conf.maybeIncrementBestChainHeightEver(newWallet.getLastBlockSeenHeight());
         afterLoadWallet();
 
         // todo: Nadie estaba escuchando esto.. Tengo que ver que deberia hacer despues
@@ -539,7 +541,56 @@ public class WalletManager {
         contextWrapper.stopBlockchain();
     }
 
-    public void restoreWalletFromEncrypted(File file, String password) throws IOException {
+    /**
+     * Restore the multiWallet from an specific version number
+     * @param is
+     * @param version
+     * @return Pair<MultiWallet,Boolean>, the second params is if the wallet is from an old version and needs to be saved for the new zcoin key generation
+     * @throws IOException
+     */
+    private Pair<MultiWallet,Boolean> restoreWalletFromVersion(InputStream is, File walletFile, int version) throws UnreadableWalletException, IOException {
+        MultiWallet multiWallet;
+        boolean needsSave = false;
+        // 3 is the multiWallet version number
+        if (version >= 3){
+            try{
+                multiWallet = WalletUtils.restoreMultiWalletFromProtobufOrBase58(is, conf.getNetworkParams(), conf.getBackupMaxChars());
+            }catch (IOException e){
+                if (walletFile != null) {
+                    // This could be for a previous wallet version
+                    logger.info("Restoring wallet from a previous version " + version);
+                    FileInputStream fileInputStream = null;
+                    try {
+                        fileInputStream = new FileInputStream(walletFile);
+                        Wallet wallet = WalletUtils.restoreWalletFromProtobufOrBase58(fileInputStream, conf.getNetworkParams(), conf.getBackupMaxChars());
+                        multiWallet = new MultiWallet(wallet);
+                        needsSave = true;
+                    } finally {
+                        if (fileInputStream != null) {
+                            fileInputStream.close();
+                        }
+                    }
+                }else {
+                    throw e;
+                }
+            }
+        }else {
+            logger.info("Restoring wallet from a previous version..");
+            Wallet wallet = WalletUtils.restoreWalletFromProtobufOrBase58(is, conf.getNetworkParams(), conf.getBackupMaxChars());
+            multiWallet = new MultiWallet(wallet);
+        }
+        return new Pair<>(multiWallet, needsSave);
+    }
+
+    public void restoreWalletFromEncrypted(File file, String password, int version) throws IOException, UnreadableWalletException {
+
+        boolean walletExists = wallet != null;
+
+        if (!walletExists){
+            // init mnemonic code first..
+            initMnemonicCode();
+        }
+
         final BufferedReader cipherIn = new BufferedReader(new InputStreamReader(new FileInputStream(file), Charsets.UTF_8));
         final StringBuilder cipherText = new StringBuilder();
         Io.copy(cipherIn, cipherText, conf.getBackupMaxChars());
@@ -548,7 +599,20 @@ public class WalletManager {
         final byte[] plainText = Crypto.decryptBytes(cipherText.toString(), password.toCharArray());
         final InputStream is = new ByteArrayInputStream(plainText);
 
-        restoreWallet(WalletUtils.restoreMultiWalletFromProtobufOrBase58(is, conf.getNetworkParams(), conf.getBackupMaxChars()));
+        Pair<MultiWallet, Boolean> pair = restoreWalletFromVersion(is, null, version);
+        MultiWallet multiWallet = pair.getFirst();
+
+        if (multiWallet == null) throw new IllegalStateException("Invalid backup file");
+        restoreWallet(multiWallet);
+
+        if (pair.getSecond()){
+            saveWallet();
+        }
+
+        if (!walletExists){
+            // started
+            isStarted.set(true);
+        }
 
         logger.info("successfully restored encrypted wallet: {}", file);
     }
@@ -756,6 +820,10 @@ public class WalletManager {
         return isStarted.get();
     }
 
+    public boolean isStarting(){
+        return isStarting.get();
+    }
+
 
     private static final class WalletAutosaveEventListener implements Listener {
 
@@ -767,10 +835,12 @@ public class WalletManager {
 
         @Override
         public void onBeforeAutoSave(final File file) {
+            logger.warn("On before autoSave in: " + file.getAbsolutePath());
         }
 
         @Override
         public void onAfterAutoSave(final File file) {
+            logger.warn("On after autoSave in: " + file.getAbsolutePath());
             // make wallets world accessible in test mode
             //if (conf.isTest())
             //    Io.chmod(file, 0777);

@@ -33,4 +33,6 @@ public interface ContextWrapper {
     String getVersionName();
 
     void stopBlockchain();
+
+    int getCurrentVersionNumber();
 }

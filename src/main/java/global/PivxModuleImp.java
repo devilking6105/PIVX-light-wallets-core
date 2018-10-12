@@ -23,6 +23,7 @@ import org.pivxj.crypto.MnemonicException;
 import org.pivxj.script.Script;
 import org.pivxj.wallet.DeterministicKeyChain;
 import org.pivxj.wallet.SendRequest;
+import org.pivxj.wallet.UnreadableWalletException;
 import org.pivxj.wallet.listeners.WalletCoinsReceivedEventListener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -59,6 +60,7 @@ import org.spongycastle.util.encoders.Base64;
 import host.furszy.zerocoinj.wallet.AmountPerDen;
 import host.furszy.zerocoinj.wallet.CannotSpendCoinsException;
 import host.furszy.zerocoinj.wallet.MultiWallet;
+import wallet.exceptions.CantRestoreEncryptedWallet;
 import wallet.exceptions.InsufficientInputsException;
 import wallet.exceptions.TxNotFoundException;
 import wallet.WalletManager;
@@ -96,6 +98,7 @@ public class PivxModuleImp implements PivxModule {
     }
 
     public void start() throws IOException{
+        if (walletManager.isStarted() || walletManager.isStarting()) throw new IllegalStateException("Core is starting or started");
         walletManager.init();
     }
 
@@ -120,8 +123,21 @@ public class PivxModuleImp implements PivxModule {
     }
 
     @Override
-    public void restoreWalletFromEncrypted(File file, String password) throws IOException {
-        walletManager.restoreWalletFromEncrypted(file,password);
+    public void restoreWalletFromEncrypted(File file, String password, int forceRestoreVersion) throws CantRestoreEncryptedWallet, IOException {
+        try {
+            int version = (forceRestoreVersion != -1) ? forceRestoreVersion : context.getCurrentVersionNumber();
+            try {
+                String filename = file.getName();
+                // try to determine the version from the file's name
+                version = Integer.parseInt(filename.substring(0, 1));
+            } catch (Exception e) {
+                // swallow
+            }
+            walletManager.restoreWalletFromEncrypted(file, password, version);
+        } catch (UnreadableWalletException e) {
+            logger.warn("Cannot restore wallet, UnreadableWalletException", e);
+            throw new CantRestoreEncryptedWallet(e);
+        }
     }
 
     @Override
@@ -591,7 +607,7 @@ public class PivxModuleImp implements PivxModule {
                         ret.add(
                                 new InputWrapper(
                                         transactionOutput,
-                                        new AddressLabel("Annonymous")
+                                        new AddressLabel("Anonymous")
                                 )
                         );
                 }
@@ -816,6 +832,11 @@ public class PivxModuleImp implements PivxModule {
     @Override
     public boolean isStarted() {
         return walletManager.isStarted();
+    }
+
+    @Override
+    public boolean isStarting() {
+        return walletManager.isStarting();
     }
 
 

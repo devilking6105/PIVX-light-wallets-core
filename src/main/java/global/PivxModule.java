@@ -66,7 +66,15 @@ public interface PivxModule {
      */
     void restoreWallet(File backupFile) throws IOException;
 
-    void restoreWalletFromEncrypted(File file, String password) throws CantRestoreEncryptedWallet, IOException;
+    /**
+     *
+     * @param file
+     * @param password
+     * @param forceRestoreVersion force the restauration from a previous wallet version
+     * @throws CantRestoreEncryptedWallet
+     * @throws IOException
+     */
+    void restoreWalletFromEncrypted(File file, String password, int forceRestoreVersion) throws CantRestoreEncryptedWallet, IOException;
 
     void restoreWallet(List<String> mnemonic, long timestamp,boolean bip44) throws IOException, MnemonicException;
 
@@ -207,4 +215,6 @@ public interface PivxModule {
     List<AmountPerDen> listAmountPerDen();
 
     boolean isStarted();
+
+    boolean isStarting();
 }
