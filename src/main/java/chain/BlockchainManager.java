@@ -6,6 +6,7 @@ import com.google.common.util.concurrent.ListenableFuture;
 import global.utils.Io;
 import org.pivxj.core.BlockChain;
 import org.pivxj.core.CheckpointManager;
+import org.pivxj.core.Context;
 import org.pivxj.core.Peer;
 import org.pivxj.core.PeerGroup;
 import org.pivxj.core.Sha256Hash;
@@ -15,6 +16,8 @@ import org.pivxj.core.TransactionBroadcast;
 import org.pivxj.core.listeners.PeerConnectedEventListener;
 import org.pivxj.core.listeners.PeerDataEventListener;
 import org.pivxj.core.listeners.PeerDisconnectedEventListener;
+import org.pivxj.core.listeners.PreMessageReceivedEventListener;
+import org.pivxj.net.discovery.DnsDiscovery;
 import org.pivxj.net.discovery.MultiplexingDiscovery;
 import org.pivxj.net.discovery.PeerDiscovery;
 import org.pivxj.net.discovery.PeerDiscoveryException;
@@ -44,6 +47,7 @@ import java.util.concurrent.TimeUnit;
 import global.ContextWrapper;
 import global.PivtrumGlobalData;
 import global.WalletConfiguration;
+import host.furszy.zerocoinj.store.RollbackBlockStore;
 import pivtrum.PivtrumPeerData;
 import wallet.WalletManager;
 
@@ -97,13 +101,15 @@ public class BlockchainManager {
             try {
                 if (blockStoreInit != null && blockStoreInit.getChainHead().getHeight() < 2) {
                     blockChainFileExists = false;
+                    LOG.info("resetting blockstore for been on block height: " + blockStoreInit.getChainHead().getHeight() );
                 }
             } catch (BlockStoreException e) {
                 e.printStackTrace();
+                LOG.error("init blockstore exception",e);
             }
 
             if (!blockChainFileExists) {
-                LOG.info("blockchain does not exist, resetting wallet");
+                LOG.info("blockchain does not exist, resetting wallet. File: " + blockChainFile.getAbsolutePath());
                 walletManager.reset();
             }
 
@@ -141,6 +147,7 @@ public class BlockchainManager {
             // create the blockchain
             try {
                 blockChain = new BlockChain(conf.getNetworkParams(), blockStore);
+                Context.get().blockChain = blockChain;
                 walletManager.addWalletFrom(blockChain);
             } catch (final BlockStoreException x) {
                 throw new Error("blockchain cannot be created", x);
@@ -206,16 +213,30 @@ public class BlockchainManager {
         }
     }
 
-    public void destroy(boolean resetBlockchainOnShutdown) {
+    private void stopPeerGroup(){
         if (peerGroup != null) {
-//            peerGroup.removeDisconnectedEventListener(peerConnectivityListener);
-//            peerGroup.removeConnectedEventListener(peerConnectivityListener);
             walletManager.removeWalletFrom(peerGroup);
-            if (peerGroup.isRunning())
+            if (peerGroup.isRunning()) {
                 peerGroup.stopAsync();
+            }
             peerGroup = null;
             LOG.info("peergroup stopped");
         }
+    }
+
+    private void stopPeerGroupSync(){
+        if (peerGroup != null) {
+            walletManager.removeWalletFrom(peerGroup);
+            if (peerGroup.isRunning())
+                peerGroup.stop();
+            peerGroup = null;
+            LOG.info("peergroup stopped");
+        }
+    }
+
+    public void rollbackTo(int height){
+        // Stop peergroup
+        stopPeerGroup();
 
         if (blockStore != null) {
             try {
@@ -228,8 +249,52 @@ public class BlockchainManager {
         // save the wallet
         walletManager.saveWallet();
 
+        if (height > 0 && blockStore instanceof RollbackBlockStore) {
+            LOG.info("Blockchain rollback");
+            try {
+                ((RollbackBlockStore) blockStore).rollbackTo(height);
+            } catch (BlockStoreException e) {
+                LoggerFactory.getLogger(BlockchainManager.class).error("Cannot rollback blockchain..");
+            }
+            blockChain = null;
+            blockStore = null;
+        }
+    }
+    public void destroy(boolean resetBlockchainOnShutdown) {
+        // Stop peergroup
+        stopPeerGroupSync();
+
+        if (blockStore != null) {
+            try {
+                blockStore.close();
+            } catch (final BlockStoreException x) {
+                throw new RuntimeException(x);
+            }
+        }
+
+        if (walletManager.isStarted()){
+            // save the wallet
+            walletManager.saveWallet();
+        }
+
+
         if (resetBlockchainOnShutdown) {
             LOG.info("removing blockchain");
+            try{
+                if (conf.getWalletContext().accStore != null)
+                    conf.getWalletContext().accStore.truncate();
+            }catch (Exception e){
+                // swallow
+            }
+
+            try{
+                if (blockStore instanceof TruncableStore){
+                    ((TruncableStore) blockStore).truncate();
+                }
+            }catch (Exception e){
+                // swallow
+            }
+
             blockChain = null;
             blockStore = null;
             if(!blockChainFile.delete()){
@@ -242,9 +307,13 @@ public class BlockchainManager {
         }
     }
 
-    public void check(Set<Impediment> impediments, PeerConnectedEventListener peerConnectivityListener, PeerDisconnectedEventListener peerDisconnectedEventListener , PeerDataEventListener blockchainDownloadListener, Executor executor){
+    public void check(Set<Impediment> impediments,
+                      PeerConnectedEventListener peerConnectivityListener,
+                      PeerDisconnectedEventListener peerDisconnectedEventListener ,
+                      PeerDataEventListener blockchainDownloadListener,
+                      PreMessageReceivedEventListener preMessageReceivedEventListener,
+                      Executor executor){
         synchronized (this) {
-            //final Wallet wallet = walletManager.getWallet();
 
             if (impediments.isEmpty() && peerGroup == null) {
 
@@ -257,6 +326,7 @@ public class BlockchainManager {
                 int bestChainHeight = 0;
                 if (blockChain != null)
                     bestChainHeight = blockChain.getBestChainHeight();
+                Context.get().blockChain = blockChain;
                 if (walletLastBlockSeenHeight != -1 && walletLastBlockSeenHeight != bestChainHeight) {
                     final String message = "wallet/blockchain out of sync: " + walletLastBlockSeenHeight + "/" + bestChainHeight;
                     LOG.error(message);
@@ -270,9 +340,15 @@ public class BlockchainManager {
                 if (executor != null) {
                     peerGroup.addConnectedEventListener(executor, peerConnectivityListener);
                     peerGroup.addDisconnectedEventListener(executor, peerDisconnectedEventListener);
+
+                    if (preMessageReceivedEventListener != null)
+                        peerGroup.addPreMessageReceivedEventListener(executor, preMessageReceivedEventListener);
                 }else {
                     peerGroup.addConnectedEventListener(peerConnectivityListener);
                     peerGroup.addDisconnectedEventListener(peerDisconnectedEventListener);
+
+                    if (preMessageReceivedEventListener != null)
+                        peerGroup.addPreMessageReceivedEventListener(preMessageReceivedEventListener);
                 }
 
                 // Memory check
@@ -282,7 +358,7 @@ public class BlockchainManager {
                 final int trustedPeerPort = conf.getTrustedNodePort();
                 final boolean hasTrustedPeer = trustedPeerHost != null;
 
-                final boolean connectTrustedPeerOnly = false;// trustedPeerHost != null;//hasTrustedPeer && config.getTrustedPeerOnly();
+                final boolean connectTrustedPeerOnly = trustedPeerHost != null;//hasTrustedPeer && config.getTrustedPeerOnly();
                 peerGroup.setMaxConnections(connectTrustedPeerOnly ? 1 : maxConnectedPeers);
                 peerGroup.setConnectTimeoutMillis(conf.getPeerTimeoutMs());
                 peerGroup.setPeerDiscoveryTimeoutMillis(conf.getPeerDiscoveryTimeoutMs());
@@ -302,37 +378,64 @@ public class BlockchainManager {
                         }
                     });
                 } else {
-                    peerGroup.addPeerDiscovery(new PeerDiscovery() {
+                    if (conf.isDNSDiscoveryEnabled())
+                        peerGroup.addPeerDiscovery(new DnsDiscovery(conf.getNetworkParams()));
+                    else
+                        peerGroup.addPeerDiscovery(new PeerDiscovery() {
 
-                        private final PeerDiscovery normalPeerDiscovery = MultiplexingDiscovery.forServices(conf.getNetworkParams(), 0);
+                            private final PeerDiscovery normalPeerDiscovery = MultiplexingDiscovery.forServices(conf.getNetworkParams(), 0);
 
-                        @Override
-                        public InetSocketAddress[] getPeers(final long services, final long timeoutValue, final TimeUnit timeoutUnit)
-                                throws PeerDiscoveryException {
-                            final List<InetSocketAddress> peers = new LinkedList<>();
+                            @Override
+                            public InetSocketAddress[] getPeers(final long services, final long timeoutValue, final TimeUnit timeoutUnit)
+                                    throws PeerDiscoveryException {
+                                List<InetSocketAddress> peers = new LinkedList<>();
 
-                            boolean needsTrimPeersWorkaround = false;
+                                boolean needsTrimPeersWorkaround = false;
 
-                            final String trustedPeerHost = conf.getTrustedNodeHost();
-                            final int trustedPeerPort = conf.getTrustedNodePort();
+                                final String trustedPeerHost = conf.getTrustedNodeHost();
+                                final int trustedPeerPort = conf.getTrustedNodePort();
 
-                            boolean hasTrustedPeer = trustedPeerHost != null;
+                                boolean hasTrustedPeer = trustedPeerHost != null;
 
-                            if (hasTrustedPeer) {
-                                LOG.info("trusted peer '" + trustedPeerHost + "'" + (hasTrustedPeer ? " only" : ""));
-                                final InetSocketAddress addr;
+                                if (hasTrustedPeer) {
+                                    LOG.info("trusted peer '" + trustedPeerHost + "'" + " only");
+                                    final InetSocketAddress addr;
 
-                                int port;
-                                if (trustedPeerPort == 0){
-                                    port = conf.getNetworkParams().getPort();
-                                }else
-                                    port = trustedPeerPort;
+                                    int port;
+                                    if (trustedPeerPort == 0){
+                                        port = conf.getNetworkParams().getPort();
+                                    }else
+                                        port = trustedPeerPort;
 
-                                addr = new InetSocketAddress(trustedPeerHost, port);
+                                    addr = new InetSocketAddress(trustedPeerHost, port);
 
-                                if (addr.isUnresolved()) {
-                                    LOG.warn("Unresolved trusted peer, " + addr);
-                                    for (PivtrumPeerData pivtrumPeerData : PivtrumGlobalData.listTrustedHosts(conf.getNetworkParams().getPort())) {
+                                    if (addr.isUnresolved()) {
+                                        LOG.warn("Unresolved trusted peer, " + addr);
+                                        for (PivtrumPeerData pivtrumPeerData : PivtrumGlobalData.listTrustedHosts(conf.getNetworkParams() , conf.getNetworkParams().getPort())) {
+                                            InetSocketAddress socketAddress = new InetSocketAddress(pivtrumPeerData.getHost(), pivtrumPeerData.getTcpPort());
+                                            if (!socketAddress.isUnresolved()) {
+                                                peers.add(socketAddress);
+                                            }else {
+                                                LOG.warn("Unresolved peer, " + socketAddress);
+                                            }
+                                        }
+                                        // Remove already connected peers
+                                        peers = removeAlreadyConnectedPeers(peers);
+
+                                        InetSocketAddress[] nodes = new InetSocketAddress[peers.size()];
+                                        for (int i = 0; i < peers.size(); i++) {
+                                            nodes[i] = peers.get(i);
+                                        }
+                                        return nodes;
+                                    }
+
+
+                                    if (addr.getAddress() != null) {
+                                        peers.add(addr);
+                                        needsTrimPeersWorkaround = true;
+                                    }
+                                }else {
+                                    for (PivtrumPeerData pivtrumPeerData : PivtrumGlobalData.listTrustedHosts(conf.getNetworkParams(), conf.getNetworkParams().getPort())) {
                                         InetSocketAddress socketAddress = new InetSocketAddress(pivtrumPeerData.getHost(), pivtrumPeerData.getTcpPort());
                                         if (!socketAddress.isUnresolved()) {
                                             peers.add(socketAddress);
@@ -340,6 +443,8 @@ public class BlockchainManager {
                                             LOG.warn("Unresolved peer, " + socketAddress);
                                         }
                                     }
+                                    // remove already connected peers
+                                    peers = removeAlreadyConnectedPeers(peers);
                                     InetSocketAddress[] nodes = new InetSocketAddress[peers.size()];
                                     for (int i = 0; i < peers.size(); i++) {
                                         nodes[i] = peers.get(i);
@@ -347,57 +452,23 @@ public class BlockchainManager {
                                     return nodes;
                                 }
 
+                                if (!hasTrustedPeer && peers.isEmpty())
+                                    peers.addAll(Arrays.asList(normalPeerDiscovery.getPeers(services, timeoutValue, timeoutUnit)));
 
-                                if (addr.getAddress() != null) {
-                                    peers.add(addr);
-                                    needsTrimPeersWorkaround = true;
-                                }
-                                /*if (conf.isTest()){
-                                    // add one more peer to validate tx
-                                    peers.add(new InetSocketAddress(FURSZY_TESTNET_SERVER,6444));
-                                    needsTrimPeersWorkaround = false;
-                                }*/
-                            }else {
-                                for (PivtrumPeerData pivtrumPeerData : PivtrumGlobalData.listTrustedHosts(conf.getNetworkParams().getPort())) {
-                                    InetSocketAddress socketAddress = new InetSocketAddress(pivtrumPeerData.getHost(), pivtrumPeerData.getTcpPort());
-                                    if (!socketAddress.isUnresolved()) {
-                                        peers.add(socketAddress);
-                                    }else {
-                                        LOG.warn("Unresolved peer, " + socketAddress);
-                                    }
-                                }
-                                InetSocketAddress[] nodes = new InetSocketAddress[peers.size()];
-                                for (int i = 0; i < peers.size(); i++) {
-                                    nodes[i] = peers.get(i);
-                                }
-                                return nodes;
+                                // workaround because PeerGroup will shuffle peers
+                                if (needsTrimPeersWorkaround)
+                                    while (peers.size() >= maxConnectedPeers)
+                                        peers.remove(peers.size() - 1);
+                                // Remove already connected peers
+                                peers = removeAlreadyConnectedPeers(peers);
+                                return peers.toArray(new InetSocketAddress[0]);
                             }
 
-                            //if (conf.getNetworkParams() instanceof MainNetParams){
-                            //    peers.add(new InetSocketAddress(MAINNET_NODE,conf.getNetworkParams().getPort()));
-                            //}
-//                            if (peers.size() < 2) {
-//                                for (PivtrumPeerData pivtrumPeerData : PivtrumGlobalData.listTrustedHosts(conf.getNetworkParams().getPort())) {
-//                                    peers.add(new InetSocketAddress(pivtrumPeerData.getHost(), pivtrumPeerData.getTcpPort()));
-//                                }
-//                            }
-
-                            if (!hasTrustedPeer && peers.isEmpty())
-                                peers.addAll(Arrays.asList(normalPeerDiscovery.getPeers(services, timeoutValue, timeoutUnit)));
-
-                            // workaround because PeerGroup will shuffle peers
-                            if (needsTrimPeersWorkaround)
-                                while (peers.size() >= maxConnectedPeers)
-                                    peers.remove(peers.size() - 1);
-
-                            return peers.toArray(new InetSocketAddress[0]);
-                        }
-
-                        @Override
-                        public void shutdown() {
-                            normalPeerDiscovery.shutdown();
-                        }
-                    });
+                            @Override
+                            public void shutdown() {
+                                normalPeerDiscovery.shutdown();
+                            }
+                        });
                 }
 
                 // notify that the peergroup was initialized
@@ -432,6 +503,22 @@ public class BlockchainManager {
         //todo: ver si conviene esto..
 //        broadcastBlockchainState();
 
+    }
+
+    private List<InetSocketAddress> removeAlreadyConnectedPeers(List<InetSocketAddress> peers) {
+        // Remove the already connected peers
+        for (Peer peer : peerGroup.getConnectedPeers()) {
+            for (int i = 0; i < peers.size(); i++) {
+                InetSocketAddress inetSocketAddress = peers.get(i);
+                if (inetSocketAddress.getHostName().equals(peer.getAddress().getHostname())) {
+                    if (inetSocketAddress.getPort() == peer.getAddress().getPort()){
+                        peers.remove(inetSocketAddress);
+                        break;
+                    }
+                }
+            }
+        }
+        return peers;
     }
 
     private void notifyBlockchainStateOff(Set<Impediment> impediments) {

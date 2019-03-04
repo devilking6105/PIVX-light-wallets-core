@@ -1,5 +1,6 @@
 package global;
 
+import com.zerocoinj.core.CoinDenomination;
 import com.zerocoinj.core.CoinSpend;
 import com.zerocoinj.core.ZCoin;
 import com.zerocoinj.utils.JniBridgeWrapper;
@@ -24,6 +25,7 @@ import org.pivxj.script.Script;
 import org.pivxj.wallet.DeterministicKeyChain;
 import org.pivxj.wallet.SendRequest;
 import org.pivxj.wallet.UnreadableWalletException;
+import org.pivxj.wallet.exceptions.RequestFailedErrorcodeException;
 import org.pivxj.wallet.listeners.WalletCoinsReceivedEventListener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -810,7 +812,7 @@ public class PivxModuleImp implements PivxModule {
     }
 
     @Override
-    public Transaction spendZpiv(Context context, SendRequest sendRequest, PeerGroup peerGroup, ExecutorService executor) throws InsufficientMoneyException, CannotSpendCoinsException {
+    public Transaction spendZpiv(Context context, SendRequest sendRequest, PeerGroup peerGroup, ExecutorService executor) throws InsufficientMoneyException, CannotSpendCoinsException, RequestFailedErrorcodeException {
         return walletManager.spendZpiv(sendRequest, peerGroup, executor, context.zerocoinContext.jniBridge);
     }
 
@@ -827,6 +829,11 @@ public class PivxModuleImp implements PivxModule {
     @Override
     public List<AmountPerDen> listAmountPerDen() {
         return walletManager.listAmountPerDen();
+    }
+
+    @Override
+    public Map<CoinDenomination, HashSet<ZCoin>> getAllMintedZCoins(){
+        return walletManager.getAllMintedZCoins();
     }
 
     @Override

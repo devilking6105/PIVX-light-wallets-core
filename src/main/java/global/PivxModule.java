@@ -1,5 +1,6 @@
 package global;
 
+import com.zerocoinj.core.CoinDenomination;
 import com.zerocoinj.core.ZCoin;
 
 import org.pivxj.core.Address;
@@ -16,6 +17,7 @@ import org.pivxj.crypto.DeterministicKey;
 import org.pivxj.crypto.MnemonicException;
 import org.pivxj.wallet.DeterministicKeyChain;
 import org.pivxj.wallet.SendRequest;
+import org.pivxj.wallet.exceptions.RequestFailedErrorcodeException;
 
 import java.io.File;
 import java.io.IOException;
@@ -23,7 +25,9 @@ import java.io.UnsupportedEncodingException;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
@@ -206,13 +210,15 @@ public interface PivxModule {
     //
     SendRequest createMint(Coin value) throws InsufficientMoneyException;
     SendRequest createSpend(Address to, Coin amount, boolean mintChange) throws InsufficientMoneyException;
-    Transaction spendZpiv(Context context, SendRequest sendRequest, PeerGroup peerGroup, ExecutorService executor) throws InsufficientMoneyException, CannotSpendCoinsException;
+    Transaction spendZpiv(Context context, SendRequest sendRequest, PeerGroup peerGroup, ExecutorService executor) throws InsufficientMoneyException, CannotSpendCoinsException, RequestFailedErrorcodeException;
 
     ZCoin getAssociatedCoin(BigInteger commitmentValue);
 
     boolean isEveryOutputSpent(Transaction transaction, MultiWallet.WalletType type);
 
     List<AmountPerDen> listAmountPerDen();
+
+    Map<CoinDenomination, HashSet<ZCoin>> getAllMintedZCoins();
 
     boolean isStarted();
 

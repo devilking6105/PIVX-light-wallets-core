@@ -1,6 +1,7 @@
 package wallet;
 
 import com.google.common.base.Charsets;
+import com.zerocoinj.core.CoinDenomination;
 import com.zerocoinj.core.ZCoin;
 import com.zerocoinj.utils.JniBridgeWrapper;
 
@@ -28,6 +29,7 @@ import org.pivxj.wallet.SendRequest;
 import org.pivxj.wallet.UnreadableWalletException;
 import org.pivxj.wallet.Wallet;
 import org.pivxj.wallet.WalletProtobufSerializer;
+import org.pivxj.wallet.exceptions.RequestFailedErrorcodeException;
 import org.pivxj.wallet.listeners.WalletCoinsReceivedEventListener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -48,9 +50,10 @@ import java.io.Writer;
 import java.math.BigInteger;
 import java.security.SecureRandom;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -168,7 +171,6 @@ public class WalletManager {
                 int version = 3;
                 Pair<MultiWallet, Boolean> pair = restoreWalletFromVersion(walletStream, walletFile, version);
                 wallet = pair.getFirst();
-                logger.warn("####### wallet: " + wallet.toString() );
                 save = pair.getSecond();
             } catch (UnreadableWalletException e) {
                 logger.error("problem loading wallet", e);
@@ -430,7 +432,8 @@ public class WalletManager {
     }
 
     public void reset() {
-        wallet.reset();
+        if (wallet != null)
+            wallet.reset();
     }
 
     public long getEarliestKeyCreationTime() {
@@ -446,7 +449,8 @@ public class WalletManager {
     }
 
     public void removeWalletFrom(PeerGroup peerGroup) {
-        wallet.removePeergroup(peerGroup);
+        if (wallet != null)
+            wallet.removePeergroup(peerGroup);
     }
 
     public int getLastBlockSeenHeight() {
@@ -462,7 +466,8 @@ public class WalletManager {
     }
 
     public void removeCoinsReceivedEventListener(WalletCoinsReceivedEventListener coinReceiverListener) {
-        wallet.removeCoinsReceivedEventListener(coinReceiverListener);
+        if (wallet != null)
+            wallet.removeCoinsReceivedEventListener(coinReceiverListener);
     }
 
     public Coin getAvailableBalance() {
@@ -657,7 +662,8 @@ public class WalletManager {
     }
 
     public void removeTransactionConfidenceChange(TransactionConfidenceEventListener transactionConfidenceEventListener) {
-        wallet.removeTransactionConfidenceChange(transactionConfidenceEventListener);
+        if (wallet != null)
+            wallet.removeTransactionConfidenceChange(transactionConfidenceEventListener);
     }
 
     /**
@@ -776,7 +782,7 @@ public class WalletManager {
         return wallet.createSpendRequest(to,amount, mintChange);
     }
 
-    public Transaction spendZpiv(SendRequest sendRequest, PeerGroup peerGroup, ExecutorService executor, JniBridgeWrapper wrapper) throws InsufficientMoneyException, CannotSpendCoinsException {
+    public Transaction spendZpiv(SendRequest sendRequest, PeerGroup peerGroup, ExecutorService executor, JniBridgeWrapper wrapper) throws InsufficientMoneyException, CannotSpendCoinsException, RequestFailedErrorcodeException {
         return wallet.spendZpiv(sendRequest,peerGroup, executor, wrapper);
     }
 
@@ -814,6 +820,10 @@ public class WalletManager {
 
     public List<AmountPerDen> listAmountPerDen() {
         return wallet.listAmountPerDen();
+    }
+
+    public Map<CoinDenomination, HashSet<ZCoin>> getAllMintedZCoins(){
+        return wallet.getAllMintedZCoins();
     }
 
     public boolean isStarted() {

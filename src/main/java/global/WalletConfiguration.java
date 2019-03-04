@@ -10,6 +10,10 @@ import org.pivxj.core.NetworkParameters;
 public interface WalletConfiguration {
 
 
+    // DNS discovery only
+    void setDSNDiscovery(boolean isEnabled);
+    boolean isDNSDiscoveryEnabled();
+
     int getTrustedNodePort();
 
     String getTrustedNodeHost();
